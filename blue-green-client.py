@@ -83,7 +83,8 @@ async def fetch(url, session, boxnum, asyncState):
     except Exception as e:
         result_gridlist[boxnum].ChangeGray()
         result_gridlist[boxnum].ChangeVer("X")
-        print(e)
+        status_text.set_text("Cannot connect to server!!!")
+        #print(e)
 
 
 #------ result text window
