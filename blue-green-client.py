@@ -26,15 +26,11 @@ task_is_running = False
 
 green_ver = None
 blue_ver = None
-# green_total = 0
-# blue_total = 0
 loop = asyncio.get_event_loop()
 
 async def fetch(url, session, boxnum, asyncState):
     global green_ver
     global blue_ver
-    # global green_total
-    # global blue_total
     response = ""
     try:
         async with session.get(url) as response:
@@ -47,44 +43,52 @@ async def fetch(url, session, boxnum, asyncState):
             elif blue_ver == None and response[0] != green_ver:
                 blue_ver = response[0]
 
-            # if green_ver is None, that means we're running the first time
-            # if green_ver == None and blue_ver == None:
-            #     # to make things simple, we just get the first char returned as the version number
-            #     # so remember to change this in the nodejs server
-            #     green_ver = response[0]
-            #     result_gridlist[boxnum].ChangeGreen()
-            #     result_gridlist[boxnum].ChangeVer(response[0])
-
-            #     green_total += 1
-            #     return
-
-            # we are running the 2nd time
-            # if response[0] != green_ver and green_ver != None and blue_ver == None:
-            #     blue_ver = response[0]
-            #     result_gridlist[boxnum].ChangeBlue()
-            #     result_gridlist[boxnum].ChangeVer(response[0])
-            #     blue_total += 1
-            #     return
-
             # we already pass the 1st and 2nd run
             if response[0] == green_ver:
                 result_gridlist[boxnum].ChangeGreen()
                 result_gridlist[boxnum].ChangeVer(response[0])
-                # green_total += 1
                 asyncState.green_total = asyncState.green_total + 1
             elif response[0] == blue_ver:
                 result_gridlist[boxnum].ChangeBlue()
                 result_gridlist[boxnum].ChangeVer(response[0])
-                # blue_total += 1
                 asyncState.blue_total = asyncState.blue_total + 1
             else:
                 result_gridlist[boxnum].ChangeRed()
                 result_gridlist[boxnum].ChangeVer(response[0])
+            #updateProcessStatus()
+            complete = asyncState.green_total + asyncState.blue_total
+            status = "Completed Tasks: " + str(complete) + "/" + str(total_try)
+            status_text.set_text(status)
     except Exception as e:
+        # stop all tasks and display error message
         result_gridlist[boxnum].ChangeGray()
         result_gridlist[boxnum].ChangeVer("X")
+        global task_is_running
+        task_is_running = False
         status_text.set_text("Cannot connect to server!!!")
-        #print(e)
+
+async def fetchNoVer(url, session, boxnum, asyncState):
+    response = ""
+    try:
+        async with session.get(url) as response:
+            response = await response.text()
+            if response != "":
+                result_gridlist[boxnum].ChangeGreen()
+                asyncState.green_total = asyncState.green_total + 1
+            else:
+                result_gridlist[boxnum].ChangeRed()
+
+            status = "Completed Tasks: " + str(asyncState.green_total) + "/" + str(total_try)
+            status_text.set_text(status)
+    except Exception as e:
+        # stop all tasks and display error message
+        result_gridlist[boxnum].ChangeGray()
+        result_gridlist[boxnum].ChangeVer("X")
+        global task_is_running
+        task_is_running = False
+        status_text.set_text("Cannot connect to server!!!")
+                                                        
+
 
 
 #------ result text window
@@ -93,6 +97,13 @@ async def fetch(url, session, boxnum, asyncState):
 # bg_pile = urwid.Pile([green_text, blue_text])
 # bgfill = urwid.Filler(bg_pile, valign='top', top=1, bottom=1)
 
+finish_tasks = 0
+def updateProcessStatus():
+    if finish_tasks < total_try:
+        finish_tasks = finish_tasks + 1
+    else:
+        finish_tasks = 0
+#    status_text.set_text("Finish task: " + str(finish_tasks) + "/" + str(total_try))
 
 
 async def run(r):
@@ -112,6 +123,9 @@ async def run(r):
         asyncState.blue_total = 0
 
         async with ClientSession() as session:
+                #for i in range(r):
+                #    task = asyncio.ensure_future(fetchNoVer(url.format(i), session, i, asyncState))
+                #    tasks.append(task)
             for i in range(r):
                 task = asyncio.ensure_future(fetch(url.format(i), session, i, asyncState))
                 tasks.append(task)
@@ -121,15 +135,27 @@ async def run(r):
             # calculate percentage
             blue_percent = asyncState.blue_total/r
             green_percent = asyncState.green_total/r
-            blue_text.set_text("Blue: " + "{:.0%}".format(blue_percent))
-            green_text.set_text("Green:" + "{:.0%}".format(green_percent))
-            # blue_text.set_text("Blue: " + str(blue_total))
-            # green_text.set_text("Green:" + str(green_total))
-            # blue_text.set_text("Blue: " + str(asyncState.blue_total))
-            # green_text.set_text("Green:" + str(asyncState.green_total))
+            blue_text.set_text("Ver " + blue_ver  + ": " + "{:.0%}".format(blue_percent))
+            green_text.set_text("Ver " + green_ver  + ": " + "{:.0%}".format(green_percent))
             await asyncio.sleep(1)
+            for x in range(100):
+                if x < total_try:
+                    result_gridlist[x].ChangeGray()
+                    result_gridlist[x].ChangeVer("X")
+                else:
+                    result_gridlist[x].Hide()
 
     #print("task not running")
+
+# widget class for buttons
+# to make them disable
+class EnhancedButton(urwid.Button):
+    def __init__(self, text):
+        self.__super.__init__(text)
+    def selectable(self):
+        return False
+
+
 
 
 # widget class for result color box display
@@ -174,6 +200,10 @@ def try_radiobtn_change(rbtn, state, data):
         global total_try
         total_try = data
 
+def opt_radiobtn_change(rbtn, state, data):
+    if state:
+        global total_try
+
 def stop_button_click(btn, data):
     global task_is_running
     task_is_running = False
@@ -206,7 +236,7 @@ def start_button_click(btn, data):
     # so we split the string and just get the real url
 
     urlbox, attr = url_edit.get_text()
-    url = urlbox.split("URL: ",1)[1]
+    url = urlbox.split("Base URL: ",1)[1]
 
     task_is_running = True
     #loop = asyncio.get_event_loop()
@@ -218,8 +248,8 @@ def start_button_click(btn, data):
 ############## UI starts here #####################
 
 #------ result text window
-blue_text = urwid.Text(u"80% version 1")
-green_text = urwid.Text(u"20% version 2")
+blue_text = urwid.Text(u"")
+green_text = urwid.Text(u"")
 bg_pile = urwid.Pile([blue_text, green_text])
 bgfill = urwid.Filler(bg_pile, valign='top', top=1, bottom=1)
 
@@ -239,12 +269,12 @@ btm_div_pad = urwid.Padding(btm_div, align='center', left=1, right=1)
 # create column here to form the bottom part of the window
 bottom_col = urwid.Columns([gfill, (3, btm_div_pad),  (15, bgfill)])
 
-
+#------ radio button to choose Blue Green or CPU load
 
 
 #------ all radio buttons for number of trys
 
-try_num_text = urwid.Text(u"Number of trys")
+try_num_text = urwid.Text(u"Number of connections")
 
 bgroup = [] # button group
 r1 = urwid.RadioButton(bgroup, u"10")
@@ -275,9 +305,23 @@ radiobtn_filler = urwid.Filler(pile, valign='top', top=1, bottom=1)
 
 #---------- URL box
 
-url_edit = urwid.Edit(('normal',"URL: "), url, False)
+url_edit = urwid.Edit(('normal',"Base URL: "), url, False)
 urlmap = urwid.AttrMap(url_edit, 'editbox')
 urlfill = urwid.Filler(urlmap, valign='top', top=1, bottom=1)
+
+#---------- All tests options 
+opt_text = urwid.Text(u"Connection options:")
+testOptBtnGroup = [] # button group
+optr1 = urwid.RadioButton(testOptBtnGroup, u"Get version")
+optr2 = urwid.RadioButton(testOptBtnGroup, u"CPU load")
+optr3 = urwid.RadioButton(testOptBtnGroup, u"Connect only")
+
+opt1m = urwid.AttrWrap(optr1, 'normal', 'buttonf')
+opt2m = urwid.AttrWrap(optr2, 'normal', 'buttonf')
+opt3m = urwid.AttrWrap(optr3, 'normal', 'buttonf')
+
+optpile = urwid.Pile([opt_text, urwid.Divider(), opt1m, opt2m, opt3m])
+optbtn_filler = urwid.Filler(optpile, valign='top', top=1, bottom=1)
 
 #---------- start stop buttons
 
@@ -297,12 +341,11 @@ b3map = urwid.AttrWrap(b3, 'button', 'buttonf')
 bcol = urwid.Columns([(10,b1map), (10,b2map), (10,b3map)], dividechars=2)
 bfill = urwid.Filler(bcol, valign='top', top=1, bottom=1)
 
-topright_pile = urwid.Pile([urlfill, bfill])
+topright_pile = urwid.Pile([urlfill, optbtn_filler, bfill])
 
-top_col = urwid.Columns([(20, radiobtn_filler), topright_pile])
+top_col = urwid.Columns([(15, radiobtn_filler), (1, btm_div), topright_pile])
 
 #-------- middle divider bar with status
-
 status_text = urwid.Text(u"Test Stopped")
 status_fill = urwid.Filler(status_text, valign='top', top=1, bottom=0)
 div = urwid.Divider('-')
@@ -310,7 +353,7 @@ divfill = urwid.Filler(div, valign='top', top=0, bottom=1)
 
 #-------- put top, middle and bottom UI together
 
-main_pile = urwid.Pile([(11, top_col), (1, status_fill), (1, divfill), bottom_col])
+main_pile = urwid.Pile([(13, top_col), (1, divfill), (1, status_fill), (1, divfill), bottom_col])
 
 #------- put all that in the frame with title bar
 title_text = urwid.Text(u"Blue Green Deployment Demo")
