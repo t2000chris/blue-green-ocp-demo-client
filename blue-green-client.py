@@ -3,8 +3,18 @@
 import urwid
 import asyncio
 from aiohttp import ClientSession
+from enum import Enum
 
-url = "http://localhost:3000/api/version"
+############ Change the configuration here ##############
+
+base_url = "http://localhost:3000"
+cpu_load = 20
+
+################ change configuration ends ##############
+
+url_ver = "/api/version"
+url_cpu = "/api/cpu?load="
+url = ""
 
 # Set up color scheme for UI
 palette = [
@@ -19,7 +29,13 @@ palette = [
     ('button', 'black', 'dark cyan'),
     ('buttonf', 'white', 'dark blue')]
 
+class ConnectOpt(Enum):
+    VER = 1
+    CPU = 2
+    NONE = 3
+
 total_try = 10
+connect_opt = ConnectOpt.VER
 webget_complete = 0
 task_is_running = False
 
@@ -202,7 +218,8 @@ def try_radiobtn_change(rbtn, state, data):
 
 def opt_radiobtn_change(rbtn, state, data):
     if state:
-        global total_try
+        global connect_opt
+        connect_opt = data
 
 def stop_button_click(btn, data):
     global task_is_running
@@ -232,11 +249,20 @@ def start_button_click(btn, data):
     green_ver = None
     blue_ver = None
 
-    # the urlbox should contain prefix "URL: "
+    # the urlbox should contain prefix "Base URL: "
     # so we split the string and just get the real url
 
     urlbox, attr = url_edit.get_text()
     url = urlbox.split("Base URL: ",1)[1]
+
+    switch (connect_opt){
+        case ConnectOpt.VER:
+            url = url + url_ver
+        case ConnectOpt.CPU:
+            url = url + url_cpu + str(cpu_load)
+        case ConnectOpt.NONE:
+            url = url
+    }
 
     task_is_running = True
     #loop = asyncio.get_event_loop()
@@ -305,7 +331,7 @@ radiobtn_filler = urwid.Filler(pile, valign='top', top=1, bottom=1)
 
 #---------- URL box
 
-url_edit = urwid.Edit(('normal',"Base URL: "), url, False)
+url_edit = urwid.Edit(('normal',"Base URL: "), base_url, False)
 urlmap = urwid.AttrMap(url_edit, 'editbox')
 urlfill = urwid.Filler(urlmap, valign='top', top=1, bottom=1)
 
@@ -315,6 +341,10 @@ testOptBtnGroup = [] # button group
 optr1 = urwid.RadioButton(testOptBtnGroup, u"Get version")
 optr2 = urwid.RadioButton(testOptBtnGroup, u"CPU load")
 optr3 = urwid.RadioButton(testOptBtnGroup, u"Connect only")
+
+urwid.connect_signal(optr1, 'change', opt_radiobtn_change, ConnectOpt.VER)
+urwid.connect_signal(optr2, 'change', opt_radiobtn_change, ConnectOpt.CPU)
+urwid.connect_signal(optr3, 'change', opt_radiobtn_change, ConnectOpt.NONE)
 
 opt1m = urwid.AttrWrap(optr1, 'normal', 'buttonf')
 opt2m = urwid.AttrWrap(optr2, 'normal', 'buttonf')
