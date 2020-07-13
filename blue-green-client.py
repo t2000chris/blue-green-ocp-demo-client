@@ -8,7 +8,7 @@ from enum import Enum
 ############ Change the configuration here ##############
 
 base_url = "http://localhost:3000"
-cpu_load = 20
+cpu_load = 33
 
 ################ change configuration ends ##############
 
@@ -40,7 +40,7 @@ webget_complete = 0
 task_is_running = False
 
 
-green_ver = None
+green_ver = None 
 blue_ver = None
 loop = asyncio.get_event_loop()
 
@@ -71,7 +71,6 @@ async def fetch(url, session, boxnum, asyncState):
             else:
                 result_gridlist[boxnum].ChangeRed()
                 result_gridlist[boxnum].ChangeVer(response[0])
-            #updateProcessStatus()
             complete = asyncState.green_total + asyncState.blue_total
             status = "Completed Tasks: " + str(complete) + "/" + str(total_try)
             status_text.set_text(status)
@@ -124,8 +123,7 @@ def updateProcessStatus():
 
 async def run(r):
     global task_is_running
-    # global green_total
-    # global blue_total
+    global connect_opt
     tasks = []
 
     asyncState = type('', (), {})()
@@ -139,20 +137,29 @@ async def run(r):
         asyncState.blue_total = 0
 
         async with ClientSession() as session:
-                #for i in range(r):
-                #    task = asyncio.ensure_future(fetchNoVer(url.format(i), session, i, asyncState))
-                #    tasks.append(task)
-            for i in range(r):
-                task = asyncio.ensure_future(fetch(url.format(i), session, i, asyncState))
-                tasks.append(task)
+            #for i in range(r):
+            #    task = asyncio.ensure_future(fetch(url.format(i), session, i, asyncState))
+            #    tasks.append(task)
+            if connect_opt == ConnectOpt.VER:
+                for i in range(r):
+                    task = asyncio.ensure_future(fetch(url.format(i), session, i, asyncState))
+                    tasks.append(task)
+            else:
+                for i in range(r):
+                    task = asyncio.ensure_future(fetchNoVer(url.format(i), session, i, asyncState))
+                    tasks.append(task)
 
             await asyncio.gather(*tasks)
 
-            # calculate percentage
-            blue_percent = asyncState.blue_total/r
-            green_percent = asyncState.green_total/r
-            blue_text.set_text("Ver " + blue_ver  + ": " + "{:.0%}".format(blue_percent))
-            green_text.set_text("Ver " + green_ver  + ": " + "{:.0%}".format(green_percent))
+            # Only calculate percentage if we are pulling the version (blue green deployment)
+            if connect_opt == ConnectOpt.VER:
+                if blue_ver != None and green_ver != None:
+
+                    # calculate percentage
+                    blue_percent = asyncState.blue_total/r
+                    green_percent = asyncState.green_total/r
+                    blue_text.set_text("Ver " + blue_ver  + ": " + "{:.0%}".format(blue_percent))
+                    green_text.set_text("Ver " + green_ver  + ": " + "{:.0%}".format(green_percent))
             await asyncio.sleep(1)
             for x in range(100):
                 if x < total_try:
@@ -160,6 +167,7 @@ async def run(r):
                     result_gridlist[x].ChangeVer("X")
                 else:
                     result_gridlist[x].Hide()
+            await asyncio.sleep(1)
 
     #print("task not running")
 
@@ -237,6 +245,9 @@ def start_button_click(btn, data):
     global blue_ver
     global task_is_running
 
+    if task_is_running:
+        return
+
     status_text.set_text("Tasks started")
 
     for x in range(100):
@@ -255,14 +266,19 @@ def start_button_click(btn, data):
     urlbox, attr = url_edit.get_text()
     url = urlbox.split("Base URL: ",1)[1]
 
-    switch (connect_opt){
-        case ConnectOpt.VER:
+    if connect_opt == ConnectOpt.VER:
             url = url + url_ver
-        case ConnectOpt.CPU:
+    elif connect_opt == ConnectOpt.CPU:
             url = url + url_cpu + str(cpu_load)
-        case ConnectOpt.NONE:
+    elif connect_opt == ConnectOpt.NONE: 
             url = url
-    }
+
+    if connect_opt == ConnectOpt.CPU:
+        blue_text.set_text("CPU load: " + str(cpu_load))
+        green_text.set_text("")
+    elif connect_opt == ConnectOpt.NONE:
+        blue_text.set_text("")
+        green_text.set_text("")
 
     task_is_running = True
     #loop = asyncio.get_event_loop()
